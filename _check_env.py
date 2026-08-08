@@ -41,7 +41,7 @@ def main():
         or importlib.util.find_spec("PySide6") is not None
     )
     if has_qt and importlib.util.find_spec("sqlite3") is not None:
-        print("结论：运行环境满足要求，可直接运行 python main.py")
+        print("结论：运行环境满足要求，可直接运行 python main.pyw")
     else:
         print("结论：缺少必需依赖，请执行 pip install -r requirements.txt")
     print("=" * 50)

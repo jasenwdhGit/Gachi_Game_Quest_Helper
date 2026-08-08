@@ -7,12 +7,21 @@
 """
 import json
 import os
+import sys
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 import models
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "game_tasks.db")
+
+def _base_dir():
+    """开发时返回脚本目录；PyInstaller 打包后返回 exe 所在目录，保证数据持久化。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+DB_PATH = os.path.join(_base_dir(), "game_tasks.db")
 
 
 @contextmanager
@@ -29,7 +38,11 @@ def get_conn():
 def _dt(s: str) -> datetime:
     if not s:
         return None
-    return datetime.fromisoformat(s)
+    try:
+        return datetime.fromisoformat(s)  # Python 3.11+ 兼容空格分隔 "2026-08-09 04:00:00"
+    except ValueError:
+        # 兼容 Python < 3.11（fromisoformat 不接受空格分隔）及其它格式
+        return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
 
 
 def _dt_to_str(dt: datetime) -> str:

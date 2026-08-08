@@ -135,6 +135,7 @@ class GameManageDialog(QDialog):
         self.icon_btn.clicked.connect(self.change_icon)
         self.del_btn = QPushButton("删除游戏")
         self.del_btn.setObjectName("danger")
+        self.del_btn.clicked.connect(self.delete_game)
         op.addWidget(self.rename_btn)
         op.addWidget(self.icon_btn)
         op.addWidget(self.del_btn)
@@ -200,6 +201,25 @@ class GameManageDialog(QDialog):
             self.current = db.get_game(self.current["id"])
             self.refresh()
             QMessageBox.information(self, "提示", "图标已更新")
+
+    def delete_game(self):
+        if not self.current:
+            QMessageBox.information(self, "提示", "请先选择一款游戏")
+            return
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定删除游戏「{self.current['name']}」吗？\n该游戏下的任务也会一并删除。",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        for t in db.get_tasks(game_ids={self.current["id"]}):
+            db.delete_task(t["id"])
+        db.delete_game(self.current["id"])
+        self.current = None
+        self.name_edit.clear()
+        self.refresh()
+        QMessageBox.information(self, "提示", "游戏已删除")
 
     def accept(self):
         if self.current and self.name_edit.text().strip():
@@ -277,17 +297,27 @@ class AddTaskDialog(QDialog):
 
         layout.addWidget(self.period_box)
 
-        # 限时活动截止时间（0~28 小时制）
+        # 限时活动截止时间（0~28 小时制）—— 紧凑排布：日期+时+分 紧挨在一起
         self.limit_box = QGroupBox("截止时间（游戏时间）")
         ll = QHBoxLayout(self.limit_box)
+        ll.setSpacing(4)
+        ll.setContentsMargins(8, 8, 8, 8)
         self.date_edit = QDateEdit(QDate.currentDate()); self.date_edit.setCalendarPopup(True)
         self.hour_combo = QComboBox()
+        self.hour_combo.setFixedWidth(56)
         self.hour_combo.addItems([str(h) for h in range(0, 29)])  # 0~28
         self.min_combo = QComboBox()
+        self.min_combo.setFixedWidth(56)
         self.min_combo.addItems([f"{m:02d}" for m in range(0, 60)])
-        ll.addWidget(QLabel("日期")); ll.addWidget(self.date_edit)
-        ll.addWidget(QLabel("时")); ll.addWidget(self.hour_combo)
-        ll.addWidget(QLabel("分")); ll.addWidget(self.min_combo)
+        ll.addWidget(QLabel("日期"))
+        ll.addWidget(self.date_edit)
+        ll.addSpacing(4)
+        ll.addWidget(QLabel("时"))
+        ll.addWidget(self.hour_combo)
+        ll.addSpacing(4)
+        ll.addWidget(QLabel("分"))
+        ll.addWidget(self.min_combo)
+        ll.addStretch(1)
         layout.addWidget(self.limit_box)
 
         # 提醒

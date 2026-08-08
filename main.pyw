@@ -31,7 +31,11 @@ from dialogs import (
 ICON_SIZE = 48  # 任务表图标列图标边长（px），已渲染缩放并填满单元格
 SETTINGS_ORG = "GachiGameQuestHelper"
 SETTINGS_APP = "手游日常助手 Gachi Game Quest Helper"
-CONFIG_INI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini")
+CONFIG_INI = os.path.join(
+    os.path.dirname(sys.executable)
+    if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__)),
+    "config.ini",
+)
 
 
 class StatusButton(QPushButton):

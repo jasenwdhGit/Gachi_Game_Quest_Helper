@@ -51,15 +51,16 @@
 
 ```bash
 pip install -r requirements.txt
-python main.py
+python main.pyw
 ```
 
 > 需 Python 3.8+。依赖：`PyQt5`、`PyYAML`（如有）等，详见 `requirements.txt`。
+> 也可直接运行打包好的 `GachiGameQuestHelper.exe`（无控制台窗口，数据保存在 exe 同目录）。
 
 ## 目录结构
 
 ```
-main.py        # 主窗口、三区可拖动布局、托盘、定时提醒、导入/导出、状态持久化
+main.pyw       # 主窗口、三区可拖动布局、托盘、定时提醒、导入/导出、状态持久化
 database.py    # DAO 层（SQLite + 自动更新 + 导入导出）
 models.py      # 周期规则解析、deadline 推进、28 小时制换算、剩余时间、红警
 dialogs.py     # 添加/管理游戏、添加/编辑任务、设置、提醒、关闭确认
@@ -80,7 +81,7 @@ game_tasks.db  # 本地数据库
 
 ## 快速上手
 
-1. 运行 `python main.py`，右上角「设置」设置全局刷新点（默认 4:00）。
+1. 运行 `python main.pyw`（或 `GachiGameQuestHelper.exe`），右上角「设置」设置全局刷新点（默认 4:00）。
 2. 左侧「游戏筛选」右键 →「添加任务(自定义)」或「一键添加日常/周常」录入任务。
 3. 拖动分隔条调整三区大小；关闭后布局自动恢复。
 4. 双击任务行切换完成；任务临近截止时整行浅红提醒。
