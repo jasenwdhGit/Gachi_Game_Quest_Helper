@@ -905,6 +905,14 @@ class TaskInterface(QWidget):
     # ----------------------------- 交互 -----------------------------
     def on_status(self, tid, completed):
         database.set_completed(tid, completed)
+        # 限时活动：标记为完成后若已过期，自动删除
+        t = database.get_task(tid)
+        if t and t["task_type"] == "限时活动" and completed and t["deadline_dt"] <= datetime.now():
+            database.delete_task(tid)
+            InfoBar.success(
+                "限时任务已过期并完成", f"已自动删除「{t['task_name']}」",
+                parent=self, position=InfoBarPosition.TOP_RIGHT, duration=3000,
+            )
         self.refresh_table()
 
     def edit_task(self, tid):

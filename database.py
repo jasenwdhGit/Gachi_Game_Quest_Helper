@@ -301,6 +301,11 @@ def auto_update_all(now: datetime = None) -> bool:
             if new_dl != t["deadline_dt"] or new_comp != t["completed"]:
                 save_task_state(t["id"], new_dl, new_comp)
                 changed = True
+        elif t["task_type"] == "限时活动":
+            # 限时活动过期且已完成：自动删除（不再保留历史记录）
+            if t["deadline_dt"] <= now and t["completed"]:
+                delete_task(t["id"])
+                changed = True
     return changed
 
 
