@@ -1,1 +1,4 @@
-PyQt5>=5.15
+PyQt-Fluent-Widgets>=1.5.0
+PyQt5>=5.15.0
+pywin32>=300        # icon_for_path 提取 .exe 图标 (win32ui/win32gui/...)
+Pillow>=9.0.0       # icon_for_path 用 PIL.Image 转换图标位图

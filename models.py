@@ -1,3 +1,19 @@
+# 手游任务助手 Gacha Game Quest Helper — 业务规则
+# Copyright (C) 2026 Yamazaki_Kaoru
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 """周期规则、截止时间计算、28 小时制游戏时间换算、红色警告逻辑。
 
 任务类型（与数据库 task_type 字段保持一致，使用中文）：
@@ -30,30 +46,34 @@ def parse_period_rule(rule: str) -> dict:
     """
     if not rule:
         return {}
-    parts = rule.split("@")
-    first = parts[0]
-    res = {"kind": None, "days": None, "weekday": None, "start": None, "day": None, "hh": 0, "mm": 0}
-    if first.endswith("m"):
-        res["kind"] = "monthly"
-        res["day"] = int(parts[1])
-        hh, mm = parts[2].split(":")
-        res["hh"], res["mm"] = int(hh), int(mm)
-    else:  # 以 'd' 结尾
-        res["days"] = int(first[:-1])
-        if len(parts) == 2:  # 每日: '<天数>d@<时:分>'
-            res["kind"] = "daily"
-            time = parts[1]
-        else:  # 周常/双周常: '<天数>d@<周几|起始日期>@<时:分>'
-            mid, time = parts[1], parts[2]
-            if "-" in mid:  # 双周常起始日期
-                res["kind"] = "biweekly"
-                res["start"] = mid
-            else:  # 周几
-                res["kind"] = "weekly"
-                res["weekday"] = int(mid)
-        hh, mm = time.split(":")
-        res["hh"], res["mm"] = int(hh), int(mm)
-    return res
+    try:
+        parts = rule.split("@")
+        first = parts[0]
+        res = {"kind": None, "days": None, "weekday": None, "start": None, "day": None, "hh": 0, "mm": 0}
+        if first.endswith("m"):
+            res["kind"] = "monthly"
+            res["day"] = int(parts[1])
+            hh, mm = parts[2].split(":")
+            res["hh"], res["mm"] = int(hh), int(mm)
+        else:  # 以 'd' 结尾
+            res["days"] = int(first[:-1])
+            if len(parts) == 2:  # 每日: '<天数>d@<时:分>'
+                res["kind"] = "daily"
+                time = parts[1]
+            else:  # 周常/双周常: '<天数>d@<周几|起始日期>@<时:分>'
+                mid, time = parts[1], parts[2]
+                if "-" in mid:  # 双周常起始日期
+                    res["kind"] = "biweekly"
+                    res["start"] = mid
+                else:  # 周几
+                    res["kind"] = "weekly"
+                    res["weekday"] = int(mid)
+            hh, mm = time.split(":")
+            res["hh"], res["mm"] = int(hh), int(mm)
+        return res
+    except (ValueError, IndexError):
+        # 非法 period_rule 格式：返回空字典，由调用方兜底处理，避免崩溃
+        return {}
 
 
 def _weekday_occurrence(now: datetime, target_wd: int, hh: int, mm: int) -> datetime:
@@ -107,17 +127,21 @@ def _monthday_occurrence(now: datetime, day: int, hh: int, mm: int) -> datetime:
 def compute_initial_deadline(task_type: str, rule: str, now: datetime) -> datetime:
     """根据任务类型与规则，计算 >= now 的首次截止时间。"""
     p = parse_period_rule(rule)
+    # 空/非法规则兜底：给一个安全默认值，避免调用方 KeyError 崩溃
+    if not p:
+        return now
     if task_type == "日常":
-        cand = now.replace(hour=p["hh"], minute=p["mm"], second=0, microsecond=0)
+        cand = now.replace(hour=p.get("hh", 0), minute=p.get("mm", 0), second=0, microsecond=0)
         while cand < now:
-            cand += timedelta(days=p["days"])
+            cand += timedelta(days=p.get("days", 1))
         return cand
     if task_type == "周常":
-        return _weekday_occurrence(now, p["weekday"], p["hh"], p["mm"])
+        return _weekday_occurrence(now, p.get("weekday", 0), p.get("hh", 0), p.get("mm", 0))
     if task_type == "双周常":
-        return _biweekly_occurrence(now, p["start"], p["hh"], p["mm"])
+        return _biweekly_occurrence(now, p.get("start") or now.strftime("%Y-%m-%d"),
+                                    p.get("hh", 0), p.get("mm", 0))
     if task_type == "月常":
-        return _monthday_occurrence(now, p["day"], p["hh"], p["mm"])
+        return _monthday_occurrence(now, p.get("day", 1), p.get("hh", 0), p.get("mm", 0))
     return now  # 限时活动：deadline 由用户直接给定
 
 
@@ -134,10 +158,13 @@ def _add_one_month(dt: datetime, day: int, hh: int, mm: int) -> datetime:
 def advance_deadline(dt: datetime, task_type: str, rule: str) -> datetime:
     """将 deadline 推进一个周期（用于过期自动重置）。"""
     p = parse_period_rule(rule)
+    if not p:
+        # 空/非法规则：无法计算推进，直接返回原时间（由上层视为不可用）
+        return dt
     if task_type == "月常":
-        return _add_one_month(dt, p["day"], p["hh"], p["mm"])
+        return _add_one_month(dt, p.get("day", 1), p.get("hh", 0), p.get("mm", 0))
     # 日常 / 周常 / 双周常：按 days 推进（周常 days=7，双周常 days=14）
-    return dt + timedelta(days=p["days"])
+    return dt + timedelta(days=p.get("days", 1))
 
 
 def auto_update_deadline(deadline: datetime, completed: bool, task_type: str, rule: str,
@@ -154,7 +181,11 @@ def auto_update_deadline(deadline: datetime, completed: bool, task_type: str, ru
     comp = completed
     while d <= now:
         comp = False
-        d = advance_deadline(d, task_type, rule)
+        nd = advance_deadline(d, task_type, rule)
+        # 规则损坏/为空导致无法推进：跳出循环，避免死循环
+        if nd <= d:
+            break
+        d = nd
     return d, comp
 
 
