@@ -333,8 +333,8 @@ class TaskCard(QFrame):
         self.kv_deadline = self._kv("截止", dl_str, fixed_width=96)
         rlay.addWidget(self.kv_deadline)
 
-        # 剩余时间（固定宽度，容纳最长的剩余文本，避免文本长度不同导致布局不对齐）
-        self.kv_remain = self._kv("剩余", rem_str, fixed_width=120)
+        # 剩余时间（固定宽度，容下常用剩余文本）
+        self.kv_remain = self._kv("剩余", rem_str, fixed_width=86)
         rlay.addWidget(self.kv_remain)
         # 保存值标签引用，供 60 秒定时增量刷新剩余时间（避免全量重建卡片）
         self.remain_val_lbl = self.kv_remain.findChild(BodyLabel)
@@ -384,7 +384,7 @@ class TaskCard(QFrame):
             "name": 140,
             "type": 64,
             "deadline": 96,
-            "remain": 120,
+            "remain": 86,
             "status": 54,
         }
         spacing = 14   # lay.setSpacing(14)，元素间的间距
