@@ -364,14 +364,20 @@ class TaskCard(QFrame):
     # ----------------------------- 自适应压缩 -----------------------------
     def showEvent(self, e):
         super().showEvent(e)
-        self._apply_compact(self.width())
+        self._apply_compact()
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
-        self._apply_compact(self.width())
+        self._apply_compact()
 
-    def _apply_compact(self, w):
-        """窗口变窄时按优先级依次隐藏元素：截止→剩余→图标→名称→状态→类型。"""
+    def _apply_compact(self, w=None):
+        """窗口变窄时按优先级依次隐藏元素：截止→剩余→图标→名称→状态→类型。
+
+        w 为 None 时使用任务列表滚动区的实际可见宽度，避免被卡片 sizeHint 锁定
+        导致空间判断错误。
+        """
+        if w is None:
+            w = self.ui._compact_width() if hasattr(self.ui, "_compact_width") else self.width()
         # 各元素最小宽度（仅元素本身，不含间距），用于估算可用空间
         item_w = {
             "icon": 40,
@@ -541,7 +547,7 @@ class TaskInterface(QWidget):
         if not hasattr(self, "task_layout"):
             return
         # 用 available 宽度（滚动区可见宽）作为卡片的目标宽度
-        avail_w = self.scroll.viewport().width() if hasattr(self, "scroll") else self.width()
+        avail_w = self._compact_width()
         for i in range(self.task_layout.count()):
             item = self.task_layout.itemAt(i)
             w = item.widget() if item else None
@@ -772,6 +778,8 @@ class TaskInterface(QWidget):
             if self._saved_split_sizes:
                 self.main_split.setSizes(self._saved_split_sizes)
         self._update_collapse_btn()
+        # 筛选栏折叠/展开导致右侧任务区宽度变化，重新压缩所有任务卡片
+        QTimer.singleShot(0, self._refresh_cards_compact)
 
     def _update_collapse_btn(self):
         if self._filter_collapsed:
@@ -874,6 +882,25 @@ class TaskInterface(QWidget):
             w = item.widget() if item else None
             if isinstance(w, TaskCard):
                 w.update_remaining(now)
+
+    def _compact_width(self):
+        """任务卡片可用的实际宽度：滚动区可见宽度（而非卡片 sizeHint 宽度）。"""
+        if hasattr(self, "scroll"):
+            return self.scroll.viewport().width()
+        return self.width()
+
+    def _refresh_cards_compact(self):
+        """让所有任务卡片按当前可见宽度重新压缩。
+
+        在启动（窗口显示后）与筛选栏折叠/展开（右侧任务区宽度变化）时调用，
+        确保卡片的隐藏状态始终与当前宽度匹配。
+        """
+        avail_w = self._compact_width()
+        for i in range(self.task_layout.count()):
+            item = self.task_layout.itemAt(i)
+            w = item.widget() if item else None
+            if isinstance(w, TaskCard):
+                w._apply_compact(avail_w)
 
     # ----------------------------- 交互 -----------------------------
     def on_status(self, tid, completed):
@@ -1513,6 +1540,15 @@ class MainWindow(FluentWindow):
                 self.restoreGeometry(bytes(geo))
         except Exception:
             pass
+
+    def showEvent(self, e):
+        """窗口显示、几何恢复完成后，按实际可见宽度刷新所有任务卡片的压缩状态。
+
+        此时滚动区可见宽度已确定，比启动时立即触发更准确。
+        """
+        super().showEvent(e)
+        if hasattr(self, "task_ui"):
+            QTimer.singleShot(0, self.task_ui._refresh_cards_compact)
 
     def closeEvent(self, event):
         remember = cfg_get("remember_close", False, bool)
