@@ -1072,6 +1072,16 @@ class RemindInterface(QWidget):
         g = database.get_game(gid)
         return g["name"] if g else ""
 
+    def showEvent(self, e):
+        """每次切换到提醒页时兜底同步游戏下拉框与规则列表。
+
+        游戏在「游戏管理」中新增/重命名/删除后不会主动通知提醒页，
+        这里在页面显示时刷新，保证下拉框与规则列表始终与数据库一致。
+        """
+        super().showEvent(e)
+        if hasattr(self, "game_combo"):
+            self.refresh()
+
     def refresh(self):
         self._refresh_game_combo()
         self.list.clear()
