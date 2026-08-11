@@ -95,6 +95,53 @@ def icon_for_path(path: str) -> QIcon:
     return _icon_for_path_cached(path)
 
 
+def themed_menu(parent=None):
+    """创建随主题配色的右键菜单。
+
+    浅色主题：白底黑字；深色主题：灰底白字。菜单样式与 QFluentWidgets 主题一致。
+    """
+    menu = QMenu(parent)
+    if isDarkTheme():
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #2b2b2b;
+                border: 1px solid #3c3c3c;
+                border-radius: 8px;
+                padding: 6px;
+            }
+            QMenu::item {
+                color: #ffffff;
+                background: transparent;
+                padding: 6px 20px;
+                border-radius: 5px;
+                margin: 1px 4px;
+            }
+            QMenu::item:selected { background: rgba(255,255,255,0.12); }
+            QMenu::item:disabled { color: #666666; }
+            QMenu::separator { height: 1px; background: #3c3c3c; margin: 4px 10px; }
+        """)
+    else:
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 6px;
+            }
+            QMenu::item {
+                color: #000000;
+                background: transparent;
+                padding: 6px 20px;
+                border-radius: 5px;
+                margin: 1px 4px;
+            }
+            QMenu::item:selected { background: rgba(0,0,0,0.08); }
+            QMenu::item:disabled { color: #b0b0b0; }
+            QMenu::separator { height: 1px; background: #e0e0e0; margin: 4px 10px; }
+        """)
+    return menu
+
+
 # ----------------------------------------------------------------------------
 # 对话框基类
 # ----------------------------------------------------------------------------
@@ -223,7 +270,7 @@ class GameManageDialog(_BaseDialog):
         if not it:
             return
         gid = it.data(Qt.UserRole)
-        menu = QMenu(self)
+        menu = themed_menu(self)
         menu.addAction(qf.FluentIcon.EDIT.icon(), "重命名 / 修改图标", lambda: self._edit(gid))
         menu.addAction(qf.FluentIcon.DELETE.icon(), "删除", lambda: self._delete(gid))
         menu.exec_(self.list.mapToGlobal(pos))
@@ -338,11 +385,6 @@ class AddTaskDialog(_BaseDialog):
         cond_layout.addRow("截止(分)", self.deadline_minute)
         self.body.addWidget(self.cond)
 
-        # 提醒
-        self.remind_cb = CheckBox("需要提醒")
-        self.remind_cb.setChecked(True)
-        self.body.addWidget(self.remind_cb)
-
         # 预览
         self.preview_label = CaptionLabel("")
         self.preview_label.setStyleSheet("color: #909399;")
@@ -421,7 +463,6 @@ class AddTaskDialog(_BaseDialog):
         tidx = self.type_combo.findText(task["task_type"])
         if tidx >= 0:
             self.type_combo.setCurrentIndex(tidx)
-        self.remind_cb.setChecked(bool(task["need_remind"]))
         p = models.parse_period_rule(task["period_rule"])
         if p:
             if p.get("days"):
@@ -457,7 +498,6 @@ class AddTaskDialog(_BaseDialog):
         self.result_game_id = self.games[self.game_combo.currentIndex()]["id"]
         self.result_name = name
         self.result_type = self.type_combo.currentText()
-        self.result_remind = self.remind_cb.isChecked()
         if self.result_type == "限时活动":
             d = self.deadline_date.date().toPyDate()
             self.result_deadline = models.from_game_time_to_real(

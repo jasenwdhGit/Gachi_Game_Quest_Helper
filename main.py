@@ -49,7 +49,7 @@ import database
 import models
 import ui_dialogs
 from ui_dialogs import (
-    icon_for_path, AddGameDialog, GameManageDialog, AddTaskDialog,
+    icon_for_path, themed_menu, AddGameDialog, GameManageDialog, AddTaskDialog,
     CloseChoiceDialog, confirm
 )
 
@@ -304,17 +304,10 @@ class TaskCard(QFrame):
         self.icon_w.setObjectName("gameIcon")
         lay.addWidget(self.icon_w)
 
-        # 任务名称（字体放大，背景透明避免色块）
+        # 任务名称（字体放大，背景透明避免色块；保证最小宽度，避免被截断）
         self.name_lbl = BodyLabel(task["task_name"])
-        self.name_lbl.setMinimumWidth(60)
+        self.name_lbl.setMinimumWidth(140)
         lay.addWidget(self.name_lbl, 1)
-
-        # 提醒铃铛：need_remind 为 True 时显示（提示该任务有提醒）
-        self.remind_icon = IconWidget(AppIcon.ALARM)
-        self.remind_icon.setFixedSize(16, 16)
-        self.remind_icon.setVisible(bool(task.get("need_remind", True)))
-        self.remind_icon.setToolTip("已开启提醒")
-        lay.addWidget(self.remind_icon)
 
         r_hour = cfg_get("refresh_hour", 4, int)
         r_min = cfg_get("refresh_min", 0, int)
@@ -329,19 +322,24 @@ class TaskCard(QFrame):
         rlay.setContentsMargins(0, 0, 0, 0)
         rlay.setSpacing(12)
 
-        # 类型标签（固定宽度、居中、按类型着色）—— 压缩优先级最低（最后才隐藏）
+        # 类型 / 截止 / 状态固定宽度靠右对齐：左起依次为类型、截止、剩余（动态）、状态。
+        # 其中类型、截止、状态宽度固定，右侧面板整体靠右，保证这些元素到卡片右边缘的距离一致。
+
+        # 类型标签（固定宽度 64、居中、按类型着色）—— 压缩优先级最低（最后才隐藏）
         self.type_tag = self._tag(task["task_type"])
         rlay.addWidget(self.type_tag)
 
-        # 截止 / 剩余（文本区域背景透明）
-        self.kv_deadline = self._kv("截止", dl_str)
+        # 截止时间（固定宽度，文本格式稳定，靠右对齐时不跳动）
+        self.kv_deadline = self._kv("截止", dl_str, fixed_width=96)
         rlay.addWidget(self.kv_deadline)
-        self.kv_remain = self._kv("剩余", rem_str)
+
+        # 剩余时间（固定宽度，容纳最长的剩余文本，避免文本长度不同导致布局不对齐）
+        self.kv_remain = self._kv("剩余", rem_str, fixed_width=120)
         rlay.addWidget(self.kv_remain)
         # 保存值标签引用，供 60 秒定时增量刷新剩余时间（避免全量重建卡片）
         self.remain_val_lbl = self.kv_remain.findChild(BodyLabel)
 
-        # 状态标签（灰=未完成，绿=已完成），圆角矩形+居中文字，单击切换
+        # 状态标签（固定尺寸 54x22，灰=未完成，绿=已完成），单击切换
         self.status_lbl = QLabel("已完成" if task["completed"] else "未完成")
         self.status_lbl.setObjectName("statusTag")
         self.status_lbl.setFixedSize(54, 22)
@@ -353,7 +351,9 @@ class TaskCard(QFrame):
         )
         rlay.addWidget(self.status_lbl)
 
-        lay.addWidget(right, alignment=Qt.AlignVCenter)
+        # 右侧面板整体靠右对齐：外层 lay 中 name_lbl 是 stretch 吸收空间，
+        # 面板以 AlignRight 贴卡片右缘，保证各信息块到卡片右边缘的距离一致。
+        lay.addWidget(right, alignment=Qt.AlignRight | Qt.AlignVCenter)
 
         # 右键菜单：编辑 / 删除
         self.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -372,26 +372,30 @@ class TaskCard(QFrame):
 
     def _apply_compact(self, w):
         """窗口变窄时按优先级依次隐藏元素：截止→剩余→图标→名称→状态→类型。"""
-        # 各元素最小宽度（自身 + 相邻间距），用于估算可用空间
+        # 各元素最小宽度（仅元素本身，不含间距），用于估算可用空间
         item_w = {
-            "icon": 40 + 14,
-            "name": 60,
-            "remind": 16,
-            "type": 64 + 12,
-            "deadline": 100 + 12,
-            "remain": 100 + 12,
+            "icon": 40,
+            "name": 140,
+            "type": 64,
+            "deadline": 96,
+            "remain": 120,
             "status": 54,
         }
-        # 卡片左右内边距 16*2，lay 间距约 14
-        avail = w - 32 - 14
+        spacing = 14   # lay.setSpacing(14)，元素间的间距
+        margins = 32   # 卡片左右内边距 16*2
+        # 可用空间 = 卡片宽度 - 左右内边距
+        avail = w - margins
         # 压缩（隐藏）顺序：越靠前越先被隐藏
-        hide_order = ["deadline", "remain", "icon", "name", "remind", "status", "type"]
+        hide_order = ["deadline", "remain", "icon", "name", "status", "type"]
         shown = set(item_w.keys())
 
         def needed():
+            """全部可见元素 + 它们之间的 spacing 之和。"""
             if not shown:
                 return 0
-            return sum(item_w[k] for k in shown) - 14  # 减去最后一个元素的尾随间距
+            n = len(shown)
+            # 元素自身宽度总和 + (n-1) 个元素间间距
+            return sum(item_w[k] for k in shown) + spacing * (n - 1)
 
         while needed() > avail and hide_order:
             shown.discard(hide_order.pop(0))
@@ -402,18 +406,16 @@ class TaskCard(QFrame):
         self.kv_deadline.setVisible("deadline" in shown)
         self.kv_remain.setVisible("remain" in shown)
         self.status_lbl.setVisible("status" in shown)
-        # 铃铛仅在本任务开启提醒时才参与显隐，否则始终隐藏
-        if bool(self.task.get("need_remind", True)):
-            self.remind_icon.setVisible("remind" in shown)
 
     def _tag(self, text):
         color = self.TYPE_COLORS.get(text, "#606266")
         lbl = QLabel(text)
-        lbl.setFixedWidth(64)
+        # 固定宽高，保证不同任务类型、不同压缩状态下类型标签大小恒定
+        lbl.setFixedSize(64, 36)
         lbl.setAlignment(Qt.AlignCenter)
         lbl.setStyleSheet(
-            f"QLabel{{background:{color};color:#FFFFFF;border-radius:6px;"
-            f"padding:3px 0;font-size:12px;font-weight:600;}}"
+            f"QLabel{{background:{color};color:#FFFFFF;border-radius:7px;"
+            f"padding:0;font-size:13px;font-weight:600;}}"
         )
         return lbl
 
@@ -426,7 +428,7 @@ class TaskCard(QFrame):
             f"#statusTag:hover{{background:{hover};}}"
         )
 
-    def _kv(self, key, val):
+    def _kv(self, key, val, fixed_width=None):
         w = QWidget()
         w.setObjectName("kv")
         # 容器本身无背景，依赖外层卡片；标签全部透明避免色块
@@ -438,6 +440,9 @@ class TaskCard(QFrame):
         val_lbl = BodyLabel(val)
         v.addWidget(k)
         v.addWidget(val_lbl)
+        # 可选固定宽度：让截止时间等信息块宽度稳定，便于靠右对齐
+        if fixed_width:
+            w.setFixedWidth(fixed_width)
         return w
 
     # ----------------------------- 增量刷新 -----------------------------
@@ -501,7 +506,7 @@ class TaskCard(QFrame):
         super().mouseDoubleClickEvent(e)
 
     def _card_menu(self, pos):
-        menu = QMenu(self)
+        menu = themed_menu(self)
         menu.addAction(qf.FluentIcon.EDIT.icon(), "编辑", lambda: self.ui.edit_task(self.task["id"]))
         menu.addAction(qf.FluentIcon.DELETE.icon(), "删除", lambda: self.ui.delete_task(self.task["id"]))
         menu.exec_(self.mapToGlobal(pos))
@@ -524,6 +529,24 @@ class TaskInterface(QWidget):
         self._build_ui()
         self.apply_theme_style()
         self.refresh_all()
+
+    # ----------------------------- 窗口大小监听 -----------------------------
+    def resizeEvent(self, e):
+        """任务列表大小变化时，强制刷新所有卡片的紧凑布局。
+
+        TaskCard 自身的 resizeEvent 只在卡片宽度变化时触发；当父容器尺寸变化
+        导致滚动区宽度变化而卡片宽度未变时，这里兜底重新调用 _apply_compact。
+        """
+        super().resizeEvent(e)
+        if not hasattr(self, "task_layout"):
+            return
+        # 用 available 宽度（滚动区可见宽）作为卡片的目标宽度
+        avail_w = self.scroll.viewport().width() if hasattr(self, "scroll") else self.width()
+        for i in range(self.task_layout.count()):
+            item = self.task_layout.itemAt(i)
+            w = item.widget() if item else None
+            if isinstance(w, TaskCard):
+                w._apply_compact(avail_w)
 
     # ----------------------------- UI 构建 -----------------------------
     def _build_ui(self):
@@ -865,7 +888,7 @@ class TaskInterface(QWidget):
         if dlg.exec_() == QDialog.Accepted:
             database.update_task(
                 tid, dlg.result_game_id, dlg.result_name, dlg.result_type,
-                dlg.result_deadline, dlg.result_rule, dlg.result_remind
+                dlg.result_deadline, dlg.result_rule
             )
             database.auto_update_task(tid)
             self.refresh_all()
@@ -883,7 +906,7 @@ class TaskInterface(QWidget):
         g = next((x for x in database.get_games() if x["name"] == name), None)
         if not g:
             return
-        menu = QMenu(self)
+        menu = themed_menu(self)
         menu.addAction(qf.FluentIcon.EDIT.icon(), "重命名 / 修改图标",
                       lambda: self._edit_game(g))
         menu.addAction(qf.FluentIcon.SYNC.icon(), "重新加载程序图标",
@@ -917,7 +940,7 @@ class TaskInterface(QWidget):
         if dlg.exec_() == QDialog.Accepted:
             database.add_task(
                 dlg.result_game_id, dlg.result_name, dlg.result_type,
-                dlg.result_deadline, dlg.result_rule, dlg.result_remind
+                dlg.result_deadline, dlg.result_rule
             )
             self.refresh_all()
 
@@ -1053,7 +1076,7 @@ class RemindInterface(QWidget):
         if not it:
             return
         rid = it.data(Qt.UserRole)
-        menu = QMenu(self)
+        menu = themed_menu(self)
         menu.addAction("启用 / 停用", lambda: self._toggle(it))
         menu.addAction(qf.FluentIcon.DELETE.icon(), "删除", lambda: self._delete(rid))
         menu.exec_(self.list.mapToGlobal(pos))
