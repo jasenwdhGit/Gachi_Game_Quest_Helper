@@ -182,6 +182,7 @@ def theme_palette():
         return {
             "bg": "#202020",            # 与深色导航背景一致
             "card_bg": "#303030",       # 卡片转灰
+            "card_bg_warn": "#3A2426",  # 标红任务的浅红背景（深色）
             "card_border": "1px solid rgba(255,255,255,0.08)",
             "hover_border": "rgba(255,255,255,0.22)",
             "icon_bg": "#3a3a3a",
@@ -196,6 +197,7 @@ def theme_palette():
     return {
         "bg": "#EEF0F3",
         "card_bg": "#FFFFFF",
+        "card_bg_warn": "#FEF0F0",  # 标红任务的浅红背景（浅色）
         "card_border": "1px solid rgba(0,0,0,0.06)",
         "hover_border": "#c8c9cc",
         "icon_bg": "#F5F7FA",
@@ -480,7 +482,7 @@ class TaskCard(QFrame):
 
         self.setStyleSheet(f"""
             #taskCard {{
-                background:{p['card_bg']};
+                background:{p['card_bg_warn'] if warn else p['card_bg']};
                 border-radius:12px;
                 border:{p['card_border']};
                 {'border-left:4px solid #F56C6C;' if warn else 'border-left:4px solid transparent;'}
@@ -848,10 +850,14 @@ class TaskInterface(QWidget):
         games_by_id = {g["id"]: g for g in database.get_games()}
 
         def sort_key(t):
+            # 三级排序：① 标红(红警)未完成任务置顶 ② 其余未完成按剩余时间升序
+            #          ③ 已完成沉底。标红内部同样按剩余时间升序（最紧急在最上）。
             rem = (t["deadline_dt"] - now).total_seconds()
             if t["completed"]:
-                return (1, 1e18)
-            return (0, rem)
+                return (2, 1e18)
+            if models.is_red_warning(t["task_type"], t["deadline_dt"], now):
+                return (0, rem)
+            return (1, rem)
         tasks.sort(key=sort_key)
 
         # 清空旧卡片后重建（末尾保留 stretch）
